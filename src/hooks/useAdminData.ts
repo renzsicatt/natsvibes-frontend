@@ -1,284 +1,135 @@
-import { useState, useEffect } from 'react';
-import type { Venue, VerificationRequest, UserReport } from '../types';
+import { useCallback, useEffect, useState } from 'react';
+import type { AdminUser, Hangout, Paginated, UserReport, Venue, VerificationRequest } from '../types';
 
-export interface Hangout {
-  id: number;
-  title: string;
-  host: string;
-  venue: string;
-  date_time: string;
-  slots: string;
-  status: 'Open' | 'Full';
+const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1').replace(/\/$/, '');
+
+type Envelope<T> = { data: T; error?: { message?: string; fields?: Record<string, string[]> } };
+
+async function request<T>(path: string, token: string | null, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      Accept: 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  const payload = (await response.json().catch(() => ({}))) as Envelope<T>;
+  if (!response.ok) throw new Error(payload.error?.message ?? `Request failed (${response.status})`);
+  return payload.data;
 }
 
-const API_BASE = 'http://127.0.0.1:8080/api';
-
 export default function useAdminData() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('natsvibe_admin_token'));
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [hangouts, setHangouts] = useState<Hangout[]>([]);
   const [verifications, setVerifications] = useState<VerificationRequest[]>([]);
   const [reports, setReports] = useState<UserReport[]>([]);
   const [vibeTags, setVibeTags] = useState<string[]>([]);
+  const [loading, setLoading] = useState(Boolean(token));
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch initial data
-  useEffect(() => {
-    fetchVenues();
-    fetchHangouts();
-    fetchVerifications();
-    fetchReports();
-    fetchVibeTags();
-  }, []);
-
-  const fetchVenues = () => {
-    fetch(`${API_BASE}/venues`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch venues');
-        return res.json();
-      })
-      .then(data => {
-        setVenues(data);
-      })
-      .catch(err => {
-        console.error('Error fetching venues:', err);
-      });
+  const login = async (email: string, password: string) => {
+    const result = await request<{ token: string; user: AdminUser }>('/auth/login', null, {
+      method: 'POST', body: JSON.stringify({ email, password, device_name: 'admin-web' }),
+    });
+    if (!['admin', 'super_admin'].includes(result.user.role)) throw new Error('Admin access is required.');
+    localStorage.setItem('natsvibe_admin_token', result.token);
+    setToken(result.token);
+    setAdmin(result.user);
   };
 
-  const fetchHangouts = () => {
-    fetch(`${API_BASE}/hangouts`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch hangouts');
-        return res.json();
-      })
-      .then(data => {
-        const transformed: Hangout[] = data.map((h: any) => ({
-          id: h.id,
-          title: h.title,
-          host: h.host.name,
-          venue: h.venue.name,
-          date_time: h.date_time,
-          slots: `${h.members_count}/${h.group_size_limit}`,
-          status: h.members_count >= h.group_size_limit ? 'Full' : 'Open'
-        }));
-        setHangouts(transformed);
-      })
-      .catch(err => {
-        console.error('Error fetching hangouts:', err);
-      });
+  const logout = async () => {
+    if (token) await request('/auth/logout', token, { method: 'POST' }).catch(() => undefined);
+    localStorage.removeItem('natsvibe_admin_token');
+    setToken(null); setAdmin(null);
   };
 
-  const fetchVerifications = () => {
-    fetch(`${API_BASE}/profiles/verifications`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch verifications');
-        return res.json();
-      })
-      .then(data => {
-        setVerifications(data);
-      })
-      .catch(err => {
-        console.error('Error fetching verifications:', err);
-      });
-  };
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    setLoading(true); setError(null);
+    try {
+      const [me, venuePage, hangoutPage, verificationPage, reportPage, tags] = await Promise.all([
+        request<AdminUser>('/me', token),
+        request<Paginated<Venue>>('/venues', token),
+        request<Paginated<Hangout>>('/hangouts', token),
+        request<Paginated<VerificationRequest>>('/admin/verifications', token),
+        request<Paginated<UserReport>>('/admin/reports', token),
+        request<string[]>('/vibe-tags', token),
+      ]);
+      if (!['admin', 'super_admin'].includes(me.role)) throw new Error('Admin access is required.');
+      setAdmin(me);
+      setVenues(venuePage.data.map(venue => ({
+        ...venue,
+        maps_link: venue.google_maps_url ?? venue.maps_link ?? '',
+        price_range: venue.price_range ?? (venue.budget_min ? `PHP ${venue.budget_min}–${venue.budget_max ?? venue.budget_min}` : '$$'),
+        vibe_tags: venue.tags?.map(tag => tag.name) ?? venue.vibe_tags ?? [],
+      })));
+      setHangouts(hangoutPage.data);
+      setVerifications(verificationPage.data.map(profile => ({
+        ...profile,
+        name: profile.display_name ?? profile.name ?? profile.user?.name ?? 'Unknown',
+        age: 0,
+        requested_at: 'Pending review',
+        photo_url: profile.avatar_url ?? '',
+        status: profile.verification_status,
+      })));
+      setReports(reportPage.data.map(report => ({
+        ...report,
+        reporter: typeof report.reporter === 'string' ? report.reporter : 'Unknown',
+        reported_user: typeof report.reported_user === 'string' ? report.reported_user : 'N/A',
+        hangout_title: report.reported_hangout?.title ?? 'N/A',
+      })));
+      setVibeTags(tags);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load admin data.');
+      if (err instanceof Error && /auth|account|admin/i.test(err.message)) {
+        localStorage.removeItem('natsvibe_admin_token'); setToken(null); setAdmin(null);
+      }
+    } finally { setLoading(false); }
+  }, [token]);
 
-  const fetchReports = () => {
-    fetch(`${API_BASE}/reports`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch reports');
-        return res.json();
-      })
-      .then(data => {
-        setReports(data);
-      })
-      .catch(err => {
-        console.error('Error fetching reports:', err);
-      });
-  };
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  const fetchVibeTags = () => {
-    fetch(`${API_BASE}/vibe-tags`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch vibe tags');
-        return res.json();
-      })
-      .then(data => {
-        setVibeTags(data);
-      })
-      .catch(err => {
-        console.error('Error fetching vibe tags:', err);
-      });
+  const addVenue = async (input: Partial<Venue>) => {
+    const venue = await request<Venue>('/admin/venues', token, { method: 'POST', body: JSON.stringify(input) });
+    setVenues(previous => [venue, ...previous]);
   };
-
-  // Venue action handlers
-  const handleAddVenue = (venueData: Omit<Venue, 'id' | 'status'>) => {
-    fetch(`${API_BASE}/venues`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(venueData)
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to add venue');
-        return res.json();
-      })
-      .then((newVenue: Venue) => {
-        setVenues(prev => [newVenue, ...prev]);
-      })
-      .catch(err => {
-        console.error('Error adding venue:', err);
-        alert('Error adding venue.');
-      });
+  const updateVenue = async (id: number, input: Partial<Venue>) => {
+    const venue = await request<Venue>(`/admin/venues/${id}`, token, { method: 'PUT', body: JSON.stringify(input) });
+    setVenues(previous => previous.map(item => item.id === id ? venue : item));
   };
-
-  const handleUpdateVenue = (id: number, venueData: Omit<Venue, 'id' | 'status'>) => {
-    fetch(`${API_BASE}/venues/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(venueData)
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to update venue');
-        return res.json();
-      })
-      .then((updatedVenue: Venue) => {
-        setVenues(prev => prev.map(v => v.id === id ? updatedVenue : v));
-      })
-      .catch(err => {
-        console.error('Error updating venue:', err);
-        alert('Error updating venue.');
-      });
+  const deleteVenue = async (id: number) => {
+    await request(`/admin/venues/${id}`, token, { method: 'DELETE' });
+    setVenues(previous => previous.filter(item => item.id !== id));
   };
-
-  const handleDeleteVenue = (id: number) => {
-    if (window.confirm('Are you sure you want to remove this venue from NatsVibe?')) {
-      fetch(`${API_BASE}/venues/${id}`, {
-        method: 'DELETE'
-      })
-        .then(res => {
-          if (!res.ok) throw new Error('Failed to delete venue');
-          setVenues(prev => prev.filter(v => v.id !== id));
-        })
-        .catch(err => {
-          console.error('Error deleting venue:', err);
-          alert('Error deleting venue.');
-        });
-    }
+  const toggleStatus = async (id: number) => {
+    const venue = venues.find(item => item.id === id); if (!venue) return;
+    await updateVenue(id, { status: venue.status === 'listed' ? 'archived' : 'listed' });
   };
-
-  const handleToggleStatus = (id: number) => {
-    const venue = venues.find(v => v.id === id);
-    if (!venue) return;
-    const nextStatus = venue.status === 'active' ? 'inactive' : 'active';
-    
-    fetch(`${API_BASE}/venues/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status: nextStatus })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to toggle status');
-        return res.json();
-      })
-      .then((updatedVenue: Venue) => {
-        setVenues(prev => prev.map(v => v.id === id ? updatedVenue : v));
-      })
-      .catch(err => {
-        console.error('Error toggling status:', err);
-        alert('Error toggling status.');
-      });
+  const verify = async (id: number, status: 'approved' | 'declined') => {
+    await request(`/admin/verifications/${id}`, token, { method: 'PUT', body: JSON.stringify({ status }) });
+    setVerifications(previous => previous.filter(item => item.id !== id));
   };
-
-  // Verification review handler
-  const handleVerify = (id: number, status: 'approved' | 'declined') => {
-    fetch(`${API_BASE}/profiles/${id}/verify`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to verify user');
-        return res.json();
-      })
-      .then(() => {
-        setVerifications(prev => prev.map(v => v.id === id ? { ...v, status } : v));
-      })
-      .catch(err => {
-        console.error('Error updating user verification:', err);
-        alert('Error updating user verification.');
-      });
+  const resolveReport = async (id: number, status: 'resolved' | 'dismissed') => {
+    const report = await request<UserReport>(`/admin/reports/${id}`, token, { method: 'PUT', body: JSON.stringify({ status }) });
+    setReports(previous => previous.map(item => item.id === id ? report : item));
   };
-
-  // Report resolution handler
-  const handleResolveReport = (id: number, status: 'resolved' | 'dismissed') => {
-    fetch(`${API_BASE}/reports/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to resolve report');
-        return res.json();
-      })
-      .then(() => {
-        setReports(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-      })
-      .catch(err => {
-        console.error('Error resolving report:', err);
-        alert('Error resolving report.');
-      });
+  const addTag = async (name: string) => {
+    const result = await request<string>('/admin/vibe-tags', token, { method: 'POST', body: JSON.stringify({ name }) });
+    setVibeTags(previous => [...previous, result]);
   };
-
-  const handleAddTag = (tag: string) => {
-    fetch(`${API_BASE}/vibe-tags`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ name: tag })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to add tag');
-        return res.json();
-      })
-      .then((newTagName: string) => {
-        setVibeTags(prev => [...prev, newTagName]);
-      })
-      .catch(err => {
-        console.error('Error adding vibe tag:', err);
-        alert('Error adding vibe tag.');
-      });
-  };
-
-  // Stats calculation
-  const totalVenues = venues.length;
-  const activeVenues = venues.filter(v => v.status === 'active').length;
-  const pendingVerifications = verifications.filter(v => v.status === 'pending').length;
-  const pendingReports = reports.filter(r => r.status === 'pending').length;
 
   return {
-    venues,
-    hangouts,
-    verifications,
-    reports,
-    vibeTags,
-    totalVenues,
-    activeVenues,
-    pendingVerifications,
-    pendingReports,
-    handleAddVenue,
-    handleUpdateVenue,
-    handleDeleteVenue,
-    handleToggleStatus,
-    handleVerify,
-    handleResolveReport,
-    handleAddTag
+    isAuthenticated: Boolean(token && admin), admin, loading, error, login, logout, refresh,
+    venues, hangouts, verifications, reports, vibeTags,
+    totalVenues: venues.length,
+    activeVenues: venues.filter(v => ['listed', 'verified', 'featured', 'active'].includes(v.status)).length,
+    pendingVerifications: verifications.length,
+    pendingReports: reports.filter(r => !['resolved', 'dismissed'].includes(r.status)).length,
+    handleAddVenue: addVenue, handleUpdateVenue: updateVenue, handleDeleteVenue: deleteVenue,
+    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag,
   };
 }

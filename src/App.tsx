@@ -10,9 +10,18 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<'dashboard' | 'venues' | 'users' | 'reports' | 'tags'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [newTagInput, setNewTagInput] = useState('');
+  const [email, setEmail] = useState('admin@natsvibe.com');
+  const [password, setPassword] = useState('password');
+  const [loginError, setLoginError] = useState('');
 
   // Pull all states and functions from hook
   const {
+    isAuthenticated,
+    admin,
+    loading,
+    error,
+    login,
+    logout,
     venues,
     hangouts,
     verifications,
@@ -30,6 +39,25 @@ export default function App() {
     handleResolveReport,
     handleAddTag
   } = useAdminData();
+
+  if (!isAuthenticated) {
+    return (
+      <main className="auth-shell">
+        <form className="auth-card" onSubmit={async event => {
+          event.preventDefault(); setLoginError('');
+          try { await login(email, password); } catch (reason) { setLoginError(reason instanceof Error ? reason.message : 'Login failed.'); }
+        }}>
+          <img src={logoImg} alt="NatsVibe" className="auth-logo" />
+          <h1>Admin sign in</h1>
+          <p>Safety and operations workspace</p>
+          <label>Email<input value={email} onChange={event => setEmail(event.target.value)} type="email" required /></label>
+          <label>Password<input value={password} onChange={event => setPassword(event.target.value)} type="password" required /></label>
+          {(loginError || error) && <div className="error-banner">{loginError || error}</div>}
+          <button className="btn primary" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
+        </form>
+      </main>
+    );
+  }
 
   const handleAddTagSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,15 +121,12 @@ export default function App() {
         <header className="top">
           <div>
             <h1>Admin Panel</h1>
-            <p>Simple operations view for venues, groups, users, and reports.</p>
+            <p>Signed in as {admin?.name}. Safety, venues, groups, and moderation.</p>
           </div>
-          <input 
-            type="text" 
-            className="search-input" 
-            placeholder="Global search..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
+          <div className="top-actions">
+            <input type="text" className="search-input" placeholder="Global search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            <button className="btn" onClick={() => void logout()}>Log out</button>
+          </div>
         </header>
 
         {/* Global Statistics Summary Row */}
@@ -136,17 +161,17 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {hangouts.map(hangout => (
+                  {hangouts.filter(hangout => hangout.title.toLowerCase().includes(searchQuery.toLowerCase())).map(hangout => (
                     <tr key={hangout.id}>
                       <td>
                         {hangout.title}
                         <span className="sub">{hangout.date_time}</span>
                       </td>
-                      <td>{hangout.host}</td>
-                      <td>{hangout.venue}</td>
-                      <td>{hangout.slots}</td>
+                      <td>{hangout.host?.name ?? 'Unknown'}</td>
+                      <td>{hangout.venue?.name ?? 'Unknown'}</td>
+                      <td>{hangout.members_count}/{hangout.group_size_limit}</td>
                       <td>
-                        <span className={`pill ${hangout.status === 'Open' ? 'ok' : 'warn'}`}>
+                        <span className={`pill ${hangout.status === 'open' ? 'ok' : 'warn'}`}>
                           {hangout.status}
                         </span>
                       </td>

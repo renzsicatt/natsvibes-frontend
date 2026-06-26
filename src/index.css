@@ -29,6 +29,15 @@ body {
   min-height: 100vh;
 }
 
+.auth-shell { min-height: 100vh; display: grid; place-items: center; }
+.auth-card { width: min(420px, calc(100vw - 32px)); display: grid; gap: 16px; padding: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
+.auth-card p { color: var(--muted); }
+.auth-card label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; }
+.auth-card input { height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font: inherit; }
+.auth-logo { width: 54px; height: 54px; border-radius: 14px; }
+.error-banner { padding: 11px; color: var(--bad); background: #fff3f3; border: 1px solid #f0d2d2; border-radius: 10px; font-size: 13px; }
+.top-actions { display: flex; align-items: center; gap: 8px; }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
