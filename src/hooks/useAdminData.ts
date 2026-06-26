@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminUser, Hangout, Paginated, UserReport, Venue, VerificationRequest } from '../types';
 
+type VibeTagOption = { id: number; name: string };
+
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:8000/api/v1').replace(/\/$/, '');
+const BACKEND_BASE = API_BASE.replace(/\/api\/v1$/, '');
+const assetUrl = (path?: string) => !path ? '' : /^https?:\/\//.test(path) ? path : `${BACKEND_BASE}/storage/${path.replace(/^\//, '')}`;
 
 type Envelope<T> = { data: T; error?: { message?: string; fields?: Record<string, string[]> } };
 
@@ -57,7 +61,7 @@ export default function useAdminData() {
         request<Paginated<Hangout>>('/hangouts', token),
         request<Paginated<VerificationRequest>>('/admin/verifications', token),
         request<Paginated<UserReport>>('/admin/reports', token),
-        request<string[]>('/vibe-tags', token),
+        request<VibeTagOption[]>('/vibe-tags', token),
       ]);
       if (!['admin', 'super_admin'].includes(me.role)) throw new Error('Admin access is required.');
       setAdmin(me);
@@ -73,8 +77,9 @@ export default function useAdminData() {
         name: profile.display_name ?? profile.name ?? profile.user?.name ?? 'Unknown',
         age: 0,
         requested_at: 'Pending review',
-        photo_url: profile.avatar_url ?? '',
-        status: profile.verification_status,
+        photo_url: assetUrl(profile.avatar_url),
+        request_kind: profile.verification_status === 'pending' ? 'identity' : profile.photo_review_status === 'pending' ? 'photo' : 'host',
+        status: 'pending',
       })));
       setReports(reportPage.data.map(report => ({
         ...report,
@@ -82,7 +87,7 @@ export default function useAdminData() {
         reported_user: typeof report.reported_user === 'string' ? report.reported_user : 'N/A',
         hangout_title: report.reported_hangout?.title ?? 'N/A',
       })));
-      setVibeTags(tags);
+      setVibeTags(tags.map(tag => tag.name));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load admin data.');
       if (err instanceof Error && /auth|account|admin/i.test(err.message)) {
@@ -110,7 +115,11 @@ export default function useAdminData() {
     await updateVenue(id, { status: venue.status === 'listed' ? 'archived' : 'listed' });
   };
   const verify = async (id: number, status: 'approved' | 'declined') => {
-    await request(`/admin/verifications/${id}`, token, { method: 'PUT', body: JSON.stringify({ status }) });
+    const item = verifications.find(profile => profile.id === id);
+    const body = item?.request_kind === 'host'
+      ? { status: item.verification_status, host_status: status }
+      : { status };
+    await request(`/admin/verifications/${id}`, token, { method: 'PUT', body: JSON.stringify(body) });
     setVerifications(previous => previous.filter(item => item.id !== id));
   };
   const resolveReport = async (id: number, status: 'resolved' | 'dismissed') => {
@@ -118,8 +127,8 @@ export default function useAdminData() {
     setReports(previous => previous.map(item => item.id === id ? report : item));
   };
   const addTag = async (name: string) => {
-    const result = await request<string>('/admin/vibe-tags', token, { method: 'POST', body: JSON.stringify({ name }) });
-    setVibeTags(previous => [...previous, result]);
+    const result = await request<VibeTagOption>('/admin/vibe-tags', token, { method: 'POST', body: JSON.stringify({ name }) });
+    setVibeTags(previous => [...previous, result.name]);
   };
 
   return {

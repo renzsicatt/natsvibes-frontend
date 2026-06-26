@@ -24,7 +24,7 @@ export default function VerificationQueue({ verifications, onVerify }: Verificat
             <th>User</th>
             <th>City</th>
             <th>Selfie</th>
-            <th>Status</th>
+            <th>Request</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -46,7 +46,7 @@ export default function VerificationQueue({ verifications, onVerify }: Verificat
               </td>
               <td>
                 <span className={`pill ${req.status === 'approved' ? 'ok' : req.status === 'declined' ? 'bad' : 'warn'}`}>
-                  {req.status}
+                  {req.request_kind ?? 'identity'}
                 </span>
               </td>
               <td>

@@ -16,6 +16,9 @@ export interface VerificationRequest {
   id: number; name: string; display_name?: string; city?: string; avatar_url?: string;
   verification_status: 'pending' | 'approved' | 'declined'; status?: 'pending' | 'approved' | 'declined'; user?: AdminUser;
   age: number; requested_at: string; photo_url: string;
+  photo_review_status?: 'pending' | 'approved' | 'declined';
+  host_verification_status?: 'not_requested' | 'pending' | 'approved' | 'declined';
+  request_kind?: 'identity' | 'photo' | 'host';
 }
 export interface UserReport {
   id: number; reason: string; details: string; status: string; severity: string; created_at: string;
