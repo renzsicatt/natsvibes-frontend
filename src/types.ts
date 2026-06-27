@@ -10,7 +10,7 @@ export interface Venue {
 }
 export interface Hangout {
   id: number; title: string; date_time: string; group_size_limit: number; members_count: number;
-  status: string; host: AdminUser; venue: Venue;
+  status: string; host: AdminUser; venue: Venue; waitlist_count?: number; invite_code?: string;
 }
 export interface VerificationRequest {
   id: number; name: string; display_name?: string; city?: string; avatar_url?: string;

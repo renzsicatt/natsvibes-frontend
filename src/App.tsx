@@ -174,8 +174,10 @@ export default function App() {
                     <th>Group</th>
                     <th>Host</th>
                     <th>Venue</th>
-                    <th>Slots</th>
-                    <th>Status</th>
+                      <th>Slots</th>
+                      <th>Waitlist</th>
+                      <th>Status</th>
+                      <th>Invite</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,11 +190,13 @@ export default function App() {
                       <td>{hangout.host?.name ?? 'Unknown'}</td>
                       <td>{hangout.venue?.name ?? 'Unknown'}</td>
                       <td>{hangout.members_count}/{hangout.group_size_limit}</td>
+                      <td>{hangout.waitlist_count ?? 0}</td>
                       <td>
                         <span className={`pill ${hangout.status === 'open' ? 'ok' : 'warn'}`}>
                           {hangout.status}
                         </span>
                       </td>
+                      <td><button className="btn" disabled={!hangout.invite_code} onClick={() => hangout.invite_code && void navigator.clipboard.writeText(`natsvibe://hangouts/${hangout.invite_code}`)}>Copy link</button></td>
                     </tr>
                   ))}
                 </tbody>
