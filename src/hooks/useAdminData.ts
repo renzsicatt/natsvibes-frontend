@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminUser, Hangout, Paginated, UserReport, Venue, VerificationRequest } from '../types';
+import type { AdminUser, Hangout, ModeratedUser, Paginated, UserReport, Venue, VerificationRequest } from '../types';
 
 type VibeTagOption = { id: number; name: string };
 
@@ -32,6 +32,7 @@ export default function useAdminData() {
   const [verifications, setVerifications] = useState<VerificationRequest[]>([]);
   const [reports, setReports] = useState<UserReport[]>([]);
   const [vibeTags, setVibeTags] = useState<string[]>([]);
+  const [users, setUsers] = useState<ModeratedUser[]>([]);
   const [loading, setLoading] = useState(Boolean(token));
   const [error, setError] = useState<string | null>(null);
   const [mfa, setMfa] = useState<{ token: string; user: AdminUser; mode: 'enroll' | 'challenge'; secret?: string } | null>(null);
@@ -73,12 +74,13 @@ export default function useAdminData() {
     if (!token) return;
     setLoading(true); setError(null);
     try {
-      const [me, venuePage, hangoutPage, verificationPage, reportPage, tags] = await Promise.all([
+      const [me, venuePage, hangoutPage, verificationPage, reportPage, userPage, tags] = await Promise.all([
         request<AdminUser>('/me', token),
         request<Paginated<Venue>>('/venues', token),
         request<Paginated<Hangout>>('/hangouts', token),
         request<Paginated<VerificationRequest>>('/admin/verifications', token),
         request<Paginated<UserReport>>('/admin/reports', token),
+        request<Paginated<ModeratedUser>>('/admin/users', token),
         request<VibeTagOption[]>('/vibe-tags', token),
       ]);
       if (!['admin', 'super_admin'].includes(me.role)) throw new Error('Admin access is required.');
@@ -105,6 +107,7 @@ export default function useAdminData() {
         reported_user: typeof report.reported_user === 'string' ? report.reported_user : (report.reported_user as unknown as { name?: string })?.name ?? 'N/A',
         hangout_title: report.reported_hangout?.title ?? 'N/A',
       })));
+      setUsers(userPage.data);
       setVibeTags(tags.map(tag => tag.name));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load admin data.');
@@ -159,15 +162,19 @@ export default function useAdminData() {
     window.open(url, '_blank', 'noopener,noreferrer');
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
+  const moderateUser = async (id: number, input: { action: 'suspend' | 'ban' | 'restore'; reason: string; suspended_until?: string }) => {
+    const updated = await request<ModeratedUser>(`/admin/users/${id}/moderate`, token, { method: 'POST', body: JSON.stringify(input) });
+    setUsers(items => items.map(item => item.id === id ? updated : item));
+  };
 
   return {
     isAuthenticated: Boolean(token && admin), admin, loading, error, login, logout, refresh, mfa, confirmMfa, health,
-    venues, hangouts, verifications, reports, vibeTags,
+    venues, hangouts, verifications, reports, vibeTags, users,
     totalVenues: venues.length,
     activeVenues: venues.filter(v => ['listed', 'verified', 'featured', 'active'].includes(v.status)).length,
     pendingVerifications: verifications.length,
     pendingReports: reports.filter(r => !['resolved', 'dismissed'].includes(r.status)).length,
     handleAddVenue: addVenue, handleUpdateVenue: updateVenue, handleDeleteVenue: deleteVenue,
-    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag, handleOpenEvidence: openEvidence,
+    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag, handleOpenEvidence: openEvidence, handleModerateUser: moderateUser,
   };
 }

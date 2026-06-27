@@ -473,6 +473,9 @@ h3 {
 .health.degraded { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .health.checking { color: var(--muted); background: var(--soft); }
 .evidence-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.admin-stack { display: grid; gap: 18px; }
+.moderation-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
 
 /* Responsive query */
 @media (max-width: 980px) {

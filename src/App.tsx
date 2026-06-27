@@ -4,6 +4,7 @@ import MetricsBanner from './components/MetricsBanner';
 import VenueManager from './components/VenueManager';
 import VerificationQueue from './components/VerificationQueue';
 import ReportQueue from './components/ReportQueue';
+import UserManager from './components/UserManager';
 import logoImg from './assets/logo.png';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
     hangouts,
     verifications,
     reports,
+    users,
     vibeTags,
     totalVenues,
     activeVenues,
@@ -42,7 +44,8 @@ export default function App() {
     handleVerify,
     handleResolveReport,
     handleAddTag,
-    handleOpenEvidence
+    handleOpenEvidence,
+    handleModerateUser
   } = useAdminData();
 
   if (!isAuthenticated) {
@@ -245,10 +248,7 @@ export default function App() {
 
         {/* TAB 3: USER VERIFICATIONS */}
         {activePanel === 'users' && (
-          <VerificationQueue 
-            verifications={verifications}
-            onVerify={handleVerify}
-          />
+          <div className="admin-stack"><VerificationQueue verifications={verifications} onVerify={handleVerify} /><UserManager users={users} onModerate={handleModerateUser} /></div>
         )}
 
         {/* TAB 4: REPORTS LIST */}

@@ -1,5 +1,6 @@
 export interface Paginated<T> { data: T[]; next_cursor?: string | null }
 export interface AdminUser { id: number; name: string; email: string; role: string; status: string; profile?: Profile }
+export interface ModeratedUser extends AdminUser { suspended_until?: string | null; banned_at?: string | null }
 export interface Profile { id: number; display_name?: string; name: string; city?: string; bio?: string; avatar_url?: string; verification_status: string }
 export interface Venue {
   id: number; name: string; description?: string; area: string; city?: string; address: string;
