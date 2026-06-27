@@ -3,9 +3,10 @@ import type { UserReport } from '../types';
 interface ReportQueueProps {
   reports: UserReport[];
   onResolve: (id: number, status: 'resolved' | 'dismissed') => void;
+  onOpenEvidence: (reportId: number, evidenceId: number) => void;
 }
 
-export default function ReportQueue({ reports, onResolve }: ReportQueueProps) {
+export default function ReportQueue({ reports, onResolve, onOpenEvidence }: ReportQueueProps) {
   const handleBan = (report: UserReport) => {
     alert(`User ${report.reported_user} has been restricted and blocked from hosting or joining groups.`);
     onResolve(report.id, 'resolved');
@@ -40,6 +41,9 @@ export default function ReportQueue({ reports, onResolve }: ReportQueueProps) {
                 <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
                   Group: {report.hangout_title}
                 </p>
+                {!!report.evidence?.length && <div className="evidence-list">
+                  {report.evidence.map((evidence, index) => <button key={evidence.id} className="btn" onClick={() => onOpenEvidence(report.id, evidence.id)}>Evidence {index + 1} · {evidence.mime_type}</button>)}
+                </div>}
               </div>
 
               <span className={`pill ${report.status === 'pending' ? 'bad' : report.status === 'resolved' ? 'ok' : ''}`}>

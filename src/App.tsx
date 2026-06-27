@@ -13,6 +13,7 @@ export default function App() {
   const [email, setEmail] = useState('admin@natsvibe.com');
   const [password, setPassword] = useState('password');
   const [loginError, setLoginError] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
 
   // Pull all states and functions from hook
   const {
@@ -21,6 +22,9 @@ export default function App() {
     loading,
     error,
     login,
+    mfa,
+    confirmMfa,
+    health,
     logout,
     venues,
     hangouts,
@@ -37,10 +41,23 @@ export default function App() {
     handleToggleStatus,
     handleVerify,
     handleResolveReport,
-    handleAddTag
+    handleAddTag,
+    handleOpenEvidence
   } = useAdminData();
 
   if (!isAuthenticated) {
+    if (mfa) return <main className="auth-shell"><form className="auth-card" onSubmit={async event => {
+      event.preventDefault(); setLoginError('');
+      try { await confirmMfa(mfaCode); } catch (reason) { setLoginError(reason instanceof Error ? reason.message : 'Invalid authenticator code.'); }
+    }}>
+      <img src={logoImg} alt="NatsVibe" className="auth-logo" />
+      <h1>{mfa.mode === 'enroll' ? 'Secure your admin account' : 'Authenticator check'}</h1>
+      <p>{mfa.mode === 'enroll' ? 'Add this key to Google or Microsoft Authenticator, then enter the current code.' : 'Enter the six-digit code from your authenticator app.'}</p>
+      {mfa.secret && <div className="mfa-secret"><span>Setup key</span><strong>{mfa.secret}</strong></div>}
+      <label>Authenticator code<input value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required /></label>
+      {loginError && <div className="error-banner">{loginError}</div>}
+      <button className="btn primary" type="submit" disabled={mfaCode.length !== 6}>Verify and continue</button>
+    </form></main>;
     return (
       <main className="auth-shell">
         <form className="auth-card" onSubmit={async event => {
@@ -122,6 +139,7 @@ export default function App() {
           <div>
             <h1>Admin Panel</h1>
             <p>Signed in as {admin?.name}. Safety, venues, groups, and moderation.</p>
+            <span className={`health ${health}`}>API {health}</span>
           </div>
           <div className="top-actions">
             <input type="text" className="search-input" placeholder="Global search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
@@ -234,6 +252,7 @@ export default function App() {
           <ReportQueue 
             reports={reports}
             onResolve={handleResolveReport}
+            onOpenEvidence={(reportId, evidenceId) => void handleOpenEvidence(reportId, evidenceId).catch(reason => alert(reason instanceof Error ? reason.message : 'Could not open evidence.'))}
           />
         )}
 

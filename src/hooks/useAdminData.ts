@@ -34,15 +34,33 @@ export default function useAdminData() {
   const [vibeTags, setVibeTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(Boolean(token));
   const [error, setError] = useState<string | null>(null);
+  const [mfa, setMfa] = useState<{ token: string; user: AdminUser; mode: 'enroll' | 'challenge'; secret?: string } | null>(null);
+  const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>('checking');
 
   const login = async (email: string, password: string) => {
-    const result = await request<{ token: string; user: AdminUser }>('/auth/login', null, {
+    const result = await request<{ token: string; user: AdminUser; mfa_required?: boolean; mfa_enrollment_required?: boolean }>('/auth/login', null, {
       method: 'POST', body: JSON.stringify({ email, password, device_name: 'admin-web' }),
     });
     if (!['admin', 'super_admin'].includes(result.user.role)) throw new Error('Admin access is required.');
+    if (result.mfa_enrollment_required) {
+      const setup = await request<{ secret: string }>('/admin/mfa/setup', result.token, { method: 'POST' });
+      setMfa({ token: result.token, user: result.user, mode: 'enroll', secret: setup.secret });
+      return;
+    }
+    if (result.mfa_required) {
+      setMfa({ token: result.token, user: result.user, mode: 'challenge' });
+      return;
+    }
     localStorage.setItem('natsvibe_admin_token', result.token);
     setToken(result.token);
     setAdmin(result.user);
+  };
+
+  const confirmMfa = async (code: string) => {
+    if (!mfa) return;
+    const result = await request<{ token: string }>('/admin/mfa/confirm', mfa.token, { method: 'POST', body: JSON.stringify({ code }) });
+    localStorage.setItem('natsvibe_admin_token', result.token);
+    setToken(result.token); setAdmin(mfa.user); setMfa(null);
   };
 
   const logout = async () => {
@@ -83,8 +101,8 @@ export default function useAdminData() {
       })));
       setReports(reportPage.data.map(report => ({
         ...report,
-        reporter: typeof report.reporter === 'string' ? report.reporter : 'Unknown',
-        reported_user: typeof report.reported_user === 'string' ? report.reported_user : 'N/A',
+        reporter: typeof report.reporter === 'string' ? report.reporter : (report.reporter as unknown as { name?: string })?.name ?? 'Unknown',
+        reported_user: typeof report.reported_user === 'string' ? report.reported_user : (report.reported_user as unknown as { name?: string })?.name ?? 'N/A',
         hangout_title: report.reported_hangout?.title ?? 'N/A',
       })));
       setVibeTags(tags.map(tag => tag.name));
@@ -97,6 +115,9 @@ export default function useAdminData() {
   }, [token]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void request<{ status: string }>('/health', null).then(result => setHealth(result.status === 'ok' ? 'ok' : 'degraded')).catch(() => setHealth('degraded'));
+  }, []);
 
   const addVenue = async (input: Partial<Venue>) => {
     const venue = await request<Venue>('/admin/venues', token, { method: 'POST', body: JSON.stringify(input) });
@@ -130,15 +151,23 @@ export default function useAdminData() {
     const result = await request<VibeTagOption>('/admin/vibe-tags', token, { method: 'POST', body: JSON.stringify({ name }) });
     setVibeTags(previous => [...previous, result.name]);
   };
+  const openEvidence = async (reportId: number, evidenceId: number) => {
+    if (!token) return;
+    const response = await fetch(`${API_BASE}/admin/reports/${reportId}/evidence/${evidenceId}`, { headers: { Accept: '*/*', Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new Error(`Evidence download failed (${response.status})`);
+    const url = URL.createObjectURL(await response.blob());
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
 
   return {
-    isAuthenticated: Boolean(token && admin), admin, loading, error, login, logout, refresh,
+    isAuthenticated: Boolean(token && admin), admin, loading, error, login, logout, refresh, mfa, confirmMfa, health,
     venues, hangouts, verifications, reports, vibeTags,
     totalVenues: venues.length,
     activeVenues: venues.filter(v => ['listed', 'verified', 'featured', 'active'].includes(v.status)).length,
     pendingVerifications: verifications.length,
     pendingReports: reports.filter(r => !['resolved', 'dismissed'].includes(r.status)).length,
     handleAddVenue: addVenue, handleUpdateVenue: updateVenue, handleDeleteVenue: deleteVenue,
-    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag,
+    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag, handleOpenEvidence: openEvidence,
   };
 }

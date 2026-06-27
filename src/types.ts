@@ -24,4 +24,6 @@ export interface UserReport {
   id: number; reason: string; details: string; status: string; severity: string; created_at: string;
   reporter: string; reported_user: string; reported_hangout?: Hangout; resolution?: string;
   hangout_title?: string;
+  evidence?: ReportEvidence[];
 }
+export interface ReportEvidence { id: number; report_id: number; mime_type: string; size: number; review_status: string }
