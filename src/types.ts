@@ -28,3 +28,4 @@ export interface UserReport {
   evidence?: ReportEvidence[];
 }
 export interface ReportEvidence { id: number; report_id: number; mime_type: string; size: number; review_status: string }
+export interface AdminMessage { id: number; message_text: string; type: string; created_at: string; edited_at?: string | null; deleted_at?: string | null; reported_at?: string | null; sender?: AdminUser; hangout?: Hangout }

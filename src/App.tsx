@@ -5,10 +5,11 @@ import VenueManager from './components/VenueManager';
 import VerificationQueue from './components/VerificationQueue';
 import ReportQueue from './components/ReportQueue';
 import UserManager from './components/UserManager';
+import MessageModeration from './components/MessageModeration';
 import logoImg from './assets/logo.png';
 
 export default function App() {
-  const [activePanel, setActivePanel] = useState<'dashboard' | 'venues' | 'users' | 'reports' | 'tags'>('dashboard');
+  const [activePanel, setActivePanel] = useState<'dashboard' | 'venues' | 'users' | 'reports' | 'messages' | 'tags'>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [newTagInput, setNewTagInput] = useState('');
   const [email, setEmail] = useState('admin@natsvibe.com');
@@ -32,6 +33,7 @@ export default function App() {
     verifications,
     reports,
     users,
+    messages,
     vibeTags,
     totalVenues,
     activeVenues,
@@ -45,7 +47,8 @@ export default function App() {
     handleResolveReport,
     handleAddTag,
     handleOpenEvidence,
-    handleModerateUser
+    handleModerateUser,
+    handleDeleteMessage
   } = useAdminData();
 
   if (!isAuthenticated) {
@@ -125,6 +128,7 @@ export default function App() {
           >
             Reports <span className="count">{reports.filter(r => r.status === 'pending').length}</span>
           </button>
+          <button className={activePanel === 'messages' ? 'active' : ''} onClick={() => setActivePanel('messages')}>Messages <span className="count">{messages.filter(message => message.reported_at && !message.deleted_at).length}</span></button>
           
           <button 
             className={activePanel === 'tags' ? 'active' : ''} 
@@ -259,6 +263,8 @@ export default function App() {
             onOpenEvidence={(reportId, evidenceId) => void handleOpenEvidence(reportId, evidenceId).catch(reason => alert(reason instanceof Error ? reason.message : 'Could not open evidence.'))}
           />
         )}
+
+        {activePanel === 'messages' && <MessageModeration messages={messages} onDelete={handleDeleteMessage} />}
 
         {/* TAB 5: TAGS CLOUD EDITOR */}
         {activePanel === 'tags' && (
