@@ -21,9 +21,9 @@ export default function UserManager({ users, onModerate }: Props) {
   };
 
   return <section className="panel section"><div className="panel-head"><div><h2>User Management</h2><p>Suspend, ban, or restore member access. Every action is audited.</p></div><input className="search-input" placeholder="Search name or email" value={search} onChange={event => setSearch(event.target.value)} /></div>
-    <table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Restriction</th><th>Actions</th></tr></thead><tbody>{visible.map(user => <tr key={user.id}>
+    <table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Reputation</th><th>Restriction</th><th>Actions</th></tr></thead><tbody>{visible.map(user => <tr key={user.id}>
       <td>{user.name}<span className="sub">{user.email}</span></td><td>{user.role}</td><td><span className={`pill ${user.status === 'active' ? 'ok' : user.status === 'banned' ? 'bad' : 'warn'}`}>{user.status}</span></td>
-      <td>{user.suspended_until ? `Until ${new Date(user.suspended_until).toLocaleString()}` : user.banned_at ? `Since ${new Date(user.banned_at).toLocaleString()}` : '—'}</td>
+      <td>{user.reputation_review_count ? `${Number(user.reputation_rating ?? 0).toFixed(1)}★ · ${user.no_show_strikes ?? 0} no-show · ${user.safety_flags ?? 0} safety` : 'No reviews'}</td><td>{user.suspended_until ? `Until ${new Date(user.suspended_until).toLocaleString()}` : user.banned_at ? `Since ${new Date(user.banned_at).toLocaleString()}` : '—'}</td>
       <td><div className="moderation-actions">{user.status === 'active' ? <><button className="btn" disabled={busy === user.id} onClick={() => void act(user, 'suspend')}>Suspend 7d</button><button className="btn danger" disabled={busy === user.id} onClick={() => void act(user, 'ban')}>Ban</button></> : <button className="btn" disabled={busy === user.id} onClick={() => void act(user, 'restore')}>Restore</button>}</div></td>
     </tr>)}</tbody></table>
   </section>;

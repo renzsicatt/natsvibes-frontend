@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminMessage, AdminUser, Hangout, ModeratedUser, Paginated, UserReport, Venue, VerificationRequest } from '../types';
+import type { AdminMessage, AdminUser, Hangout, ModeratedUser, ModerationAppeal, Paginated, UserReport, Venue, VerificationRequest } from '../types';
 
 type VibeTagOption = { id: number; name: string };
 
@@ -34,6 +34,7 @@ export default function useAdminData() {
   const [vibeTags, setVibeTags] = useState<string[]>([]);
   const [users, setUsers] = useState<ModeratedUser[]>([]);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [appeals, setAppeals] = useState<ModerationAppeal[]>([]);
   const [loading, setLoading] = useState(Boolean(token));
   const [error, setError] = useState<string | null>(null);
   const [mfa, setMfa] = useState<{ token: string; user: AdminUser; mode: 'enroll' | 'challenge'; secret?: string } | null>(null);
@@ -75,7 +76,7 @@ export default function useAdminData() {
     if (!token) return;
     setLoading(true); setError(null);
     try {
-      const [me, venuePage, hangoutPage, verificationPage, reportPage, userPage, messagePage, tags] = await Promise.all([
+      const [me, venuePage, hangoutPage, verificationPage, reportPage, userPage, messagePage, appealPage, tags] = await Promise.all([
         request<AdminUser>('/me', token),
         request<Paginated<Venue>>('/venues', token),
         request<Paginated<Hangout>>('/hangouts', token),
@@ -83,6 +84,7 @@ export default function useAdminData() {
         request<Paginated<UserReport>>('/admin/reports', token),
         request<Paginated<ModeratedUser>>('/admin/users', token),
         request<Paginated<AdminMessage>>('/admin/messages', token),
+        request<Paginated<ModerationAppeal>>('/admin/appeals', token),
         request<VibeTagOption[]>('/vibe-tags', token),
       ]);
       if (!['admin', 'super_admin'].includes(me.role)) throw new Error('Admin access is required.');
@@ -111,6 +113,7 @@ export default function useAdminData() {
       })));
       setUsers(userPage.data);
       setMessages(messagePage.data);
+      setAppeals(appealPage.data);
       setVibeTags(tags.map(tag => tag.name));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load admin data.');
@@ -173,15 +176,20 @@ export default function useAdminData() {
     await request(`/messages/${id}`, token, { method: 'DELETE' });
     setMessages(items => items.map(item => item.id === id ? { ...item, deleted_at: new Date().toISOString() } : item));
   };
+  const decideAppeal = async (id: number, decision: 'approved' | 'declined', notes: string) => {
+    const updated = await request<ModerationAppeal>(`/admin/appeals/${id}/decide`, token, { method: 'POST', body: JSON.stringify({ decision, notes }) });
+    setAppeals(items => items.map(item => item.id === id ? updated : item));
+    if (decision === 'approved') setUsers(items => items.map(item => item.id === updated.user.id ? { ...item, status: 'active', suspended_until: null, banned_at: null } : item));
+  };
 
   return {
     isAuthenticated: Boolean(token && admin), admin, loading, error, login, logout, refresh, mfa, confirmMfa, health,
-    venues, hangouts, verifications, reports, vibeTags, users, messages,
+    venues, hangouts, verifications, reports, vibeTags, users, messages, appeals,
     totalVenues: venues.length,
     activeVenues: venues.filter(v => ['listed', 'verified', 'featured', 'active'].includes(v.status)).length,
     pendingVerifications: verifications.length,
     pendingReports: reports.filter(r => !['resolved', 'dismissed'].includes(r.status)).length,
     handleAddVenue: addVenue, handleUpdateVenue: updateVenue, handleDeleteVenue: deleteVenue,
-    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag, handleOpenEvidence: openEvidence, handleModerateUser: moderateUser, handleDeleteMessage: deleteMessage,
+    handleToggleStatus: toggleStatus, handleVerify: verify, handleResolveReport: resolveReport, handleAddTag: addTag, handleOpenEvidence: openEvidence, handleModerateUser: moderateUser, handleDeleteMessage: deleteMessage, handleDecideAppeal: decideAppeal,
   };
 }

@@ -1,6 +1,7 @@
 export interface Paginated<T> { data: T[]; next_cursor?: string | null }
 export interface AdminUser { id: number; name: string; email: string; role: string; status: string; profile?: Profile }
-export interface ModeratedUser extends AdminUser { suspended_until?: string | null; banned_at?: string | null }
+export interface ModeratedUser extends AdminUser { suspended_until?: string | null; banned_at?: string | null; reputation_rating?: number | null; reputation_review_count?: number; no_show_strikes?: number; safety_flags?: number }
+export interface ModerationAppeal { id: number; account_status: string; statement: string; status: string; created_at: string; decision_notes?: string | null; user: ModeratedUser }
 export interface Profile { id: number; display_name?: string; name: string; city?: string; bio?: string; avatar_url?: string; verification_status: string }
 export interface Venue {
   id: number; name: string; description?: string; area: string; city?: string; address: string;
